@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Cryptography</title>
+    <style>
+        /* تنسيق الصفحة بالكامل */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* العنوان */
+        h1 {
+            color: #4a90e2;
+            margin: 20px 0;
+        }
+
+        /* الحاوية الرئيسية */
+        .container {
+            text-align: center;
+            padding: 20px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+        }
+
+        /* الأزرار */
+        button {
+            margin: 10px 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            color: white;
+            background-color: #4a90e2;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #357abd;
+        }
+
+        /* المدخلات */
+        input[type="file"] {
+            margin: 10px 0;
+            font-size: 16px;
+        }
+
+        /* القماش (Canvas) */
+        canvas {
+            margin-top: 20px;
+            border: 2px solid #4a90e2;
+            border-radius: 5px;
+        }
+
+        /* التنبيهات */
+        .alert {
+            margin-top: 20px;
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        /* زر المشاركة */
+        .share-btn {
+            background-color: #25d366; /* لون واتساب */
+        }
+
+        .share-btn:hover {
+            background-color: #128c7e; /* اللون عند التمرير */
+        }
+    </style>
+</head>
+<body>
+    <h1>تشفير وفك تشفير الصور</h1>
+    <div class="container">
+        <input type="file" id="upload-image" accept="image/*">
+        <input type="file" id="upload-encrypted-image" accept="image/*">
+        <button id="encrypt-btn">تشفير</button>
+        <button id="decrypt-btn">فك التشفير</button>
+        <button id="share-btn" class="share-btn" style="display:none;">مشاركة الصورة المشفرة</button>
+        <canvas id="canvas"></canvas>
+        <p class="alert" id="alert-msg"></p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const uploadImage = document.getElementById('upload-image');
+        const uploadEncryptedImage = document.getElementById('upload-encrypted-image');
+        const encryptBtn = document.getElementById('encrypt-btn');
+        const decryptBtn = document.getElementById('decrypt-btn');
+        const alertMsg = document.getElementById('alert-msg');
+        const shareBtn = document.getElementById('share-btn');
+
+        let originalImageData;
+        let isEncrypted = false;
+        const numBlocksHorizontal = 80;
+        const numBlocksVertical = 50;
+        const key = 22;
+
+        function setAlert(message, color = '#e74c3c') {
+            alertMsg.textContent = message;
+            alertMsg.style.color = color;
+        }
+
+        uploadImage.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    isEncrypted = false;
+                    setAlert("تم تحميل الصورة بنجاح!", "#27ae60");
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        uploadEncryptedImage.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    isEncrypted = true;
+                    setAlert("تم تحميل الصورة المشفرة. يمكنك الآن فك التشفير.", "#27ae60");
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function swapBlocks(imageData, key) {
+            const width = canvas.width;
+            const height = canvas.height;
+            const blockWidth = Math.floor(width / numBlocksHorizontal);
+            const blockHeight = Math.floor(height / numBlocksVertical);
+            const blocks = [];
+            const positions = [];
+
+            for (let y = 0; y < numBlocksVertical; y++) {
+                for (let x = 0; x < numBlocksHorizontal; x++) {
+                    const px = x * blockWidth;
+                    const py = y * blockHeight;
+                    const block = ctx.getImageData(px, py, blockWidth, blockHeight);
+                    blocks.push(block);
+                    positions.push({ x: px, y: py });
+                }
+            }
+
+            const shuffledIndices = generateShuffledIndices(blocks.length, key);
+
+            for (let i = 0; i < blocks.length; i++) {
+                const srcBlock = blocks[i];
+                const destPos = positions[shuffledIndices[i]];
+                ctx.putImageData(srcBlock, destPos.x, destPos.y);
+            }
+
+            return shuffledIndices;
+        }
+
+        function generateShuffledIndices(length, key) {
+            const indices = [...Array(length).keys()];
+            let random = mulberry32(key);
+
+            for (let i = indices.length - 1; i > 0; i--) {
+                const j = Math.floor(random() * (i + 1));
+                [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+
+            return indices;
+        }
+
+        function mulberry32(seed) {
+            return function() {
+                let t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ (t >>> 15), t | 1);
+                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        }
+
+        encryptBtn.addEventListener('click', () => {
+            if (originalImageData && !isEncrypted) {
+                const shuffledIndices = swapBlocks(originalImageData, key);
+                localStorage.setItem('shuffledIndices', JSON.stringify(shuffledIndices));
+                isEncrypted = true;
+                setAlert("تم تشفير الصورة بنجاح!", "#27ae60");
+                shareBtn.style.display = 'inline-block'; // إظهار زر المشاركة بعد التشفير
+            } else {
+                setAlert('يرجى تحميل صورة أو أن الصورة مشفرة بالفعل.');
+            }
+        });
+
+        decryptBtn.addEventListener('click', () => {
+            const shuffledIndices = JSON.parse(localStorage.getItem('shuffledIndices'));
+            if (!shuffledIndices) {
+                setAlert("لا توجد بيانات لفك التشفير. يرجى تشفير صورة أولاً.");
+                return;
+            }
+
+            if (isEncrypted) {
+                const width = canvas.width;
+                const height = canvas.height;
+                const blockWidth = Math.floor(width / numBlocksHorizontal);
+                const blockHeight = Math.floor(height / numBlocksVertical);
+                const blocks = [];
+
+                for (let y = 0; y < numBlocksVertical; y++) {
+                    for (let x = 0; x < numBlocksHorizontal; x++) {
+                        const px = x * blockWidth;
+                        const py = y * blockHeight;
+                        const block = ctx.getImageData(px, py, blockWidth, blockHeight);
+                        blocks.push(block);
+                    }
+                }
+
+                for (let i = 0; i < blocks.length; i++) {
+                    const srcBlock = blocks[shuffledIndices[i]];
+                    const destPos = { x: (i % numBlocksHorizontal) * blockWidth, y: Math.floor(i / numBlocksHorizontal) * blockHeight };
+                    ctx.putImageData(srcBlock, destPos.x, destPos.y);
+                }
+
+                isEncrypted = false;
+                setAlert("تم فك تشفير الصورة بنجاح!", "#27ae60");
+            } else {
+                setAlert('يرجى تحميل صورة مشفرة أولاً.');
+            }
+        });
+
+        // زر المشاركة باستخدام Web Share API
+        shareBtn.addEventListener('click', async () => {
+            try {
+                const imageURL = canvas.toDataURL();
+                const shareData = {
+                    title: 'Image Cryptography',
+                    text: 'Check out this encrypted image!',
+                    url: imageURL
+                };
+                if (navigator.canShare && navigator.canShare({ files: [new File([imageURL], "encrypted-image.png")] })) {
+                    await navigator.share({
+                        title: 'Image Cryptography',
+                        text: 'Check out this encrypted image!',
+                        files: [new File([imageURL], "encrypted-image.png", { type: "image/png" })]
+                    });
+                } else {
+                    alert("مشاركة الصورة غير مدعومة على جهازك.");
+                }
+            } catch (err) {
+                console.error("حدث خطأ أثناء محاولة المشاركة: ", err);
+                alert("فشل في مشاركة الصورة.");
+            }
+        });
+    </script>
+</body>
+</html>
