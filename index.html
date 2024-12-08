@@ -252,27 +252,32 @@
 
         // زر المشاركة باستخدام Web Share API
         shareBtn.addEventListener('click', async () => {
-            try {
-                const imageURL = canvas.toDataURL();
-                const shareData = {
+    try {
+        // تحويل الصورة على القماش إلى Blob
+        canvas.toBlob(async (blob) => {
+            if (!blob) {
+                alert("حدث خطأ أثناء تحويل الصورة.");
+                return;
+            }
+
+            const file = new File([blob], "encrypted-image.png", { type: "image/png" });
+
+            // تحقق من دعم مشاركة الملفات
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
                     title: 'Image Cryptography',
                     text: 'Check out this encrypted image!',
-                    url: imageURL
-                };
-                if (navigator.canShare && navigator.canShare({ files: [new File([imageURL], "encrypted-image.png")] })) {
-                    await navigator.share({
-                        title: 'Image Cryptography',
-                        text: 'Check out this encrypted image!',
-                        files: [new File([imageURL], "encrypted-image.png", { type: "image/png" })]
-                    });
-                } else {
-                    alert("مشاركة الصورة غير مدعومة على جهازك.");
-                }
-            } catch (err) {
-                console.error("حدث خطأ أثناء محاولة المشاركة: ", err);
-                alert("فشل في مشاركة الصورة.");
+                    files: [file]
+                });
+            } else {
+                alert("مشاركة الملفات غير مدعومة على جهازك.");
             }
-        });
+        }, "image/png");
+    } catch (err) {
+        console.error("حدث خطأ أثناء محاولة المشاركة: ", err);
+        alert("فشل في مشاركة الصورة.");
+    }
+});
     </script>
 </body>
 </html>
