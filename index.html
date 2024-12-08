@@ -199,8 +199,6 @@
 
                     if (navigator.canShare && navigator.canShare({ files: [file] })) {
                         await navigator.share({
-                            title: 'Image Cryptography',
-                            text: 'Check out this image!',
                             files: [file]
                         });
                     } else {
